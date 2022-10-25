@@ -620,12 +620,13 @@ impl AggregatedCounters {
         if let Some(user_agent) = &rinfo.headers.get("user-agent") {
             self.user_agent.inc(user_agent, cursor);
         }
-        if let Some(country) = &rinfo.rinfo.geoip.country_iso {
-            self.country.inc(country, cursor);
+        if let Some(country) = rinfo.rinfo.geoip.country_iso {
+            let country_string = country.to_lowercase();
+            self.country.inc(&country_string, cursor);
             if human {
-                self.top_country_human.inc(country.to_string());
+                self.top_country_human.inc(country_string);
             } else {
-                self.top_country_bot.inc(country.to_string());
+                self.top_country_bot.inc(country_string);
             }
         }
         if let Some(asn) = &rinfo.rinfo.geoip.asn {
