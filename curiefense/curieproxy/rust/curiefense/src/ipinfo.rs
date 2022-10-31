@@ -4,105 +4,105 @@
 //!
 //! see https://github.com/ipinfo/rust/blob/master/src/api.rs
 //!
-//! All data in the database are stored as string and must be parsed afterward.
-//! This is why all field are represented as String.
+//! All data in the database are stored as str and must be parsed afterward.
+//! This is why all field are represented as str.
 
 use serde::{Deserialize, Serialize};
 
 /// IP address lookup details.
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct LocationDetails {
+pub struct LocationDetails<'a> {
     /// The city for the IP address.
-    pub city: String,
+    pub city: &'a str,
 
     /// The country for the IP address.
-    pub country: String,
+    pub country: &'a str,
 
     /// The latitude for the IP address. (f64)
-    pub lat: String,
+    pub lat: &'a str,
 
     /// The longitude for the IP address. (f64)
-    pub lng: String,
+    pub lng: &'a str,
 
     /// The region for the IP address.
-    pub region: String,
+    pub region: &'a str,
 
     /// The region for the IP address.
-    pub region_code: String,
+    pub region_code: &'a str,
 
     /// The postal code for the IP address.
-    pub postal_code: Option<String>,
+    pub postal_code: Option<&'a str>,
 
     /// The timezone for the IP address.
-    pub timezone: Option<String>,
+    pub timezone: Option<&'a str>,
 }
 
 /// Privacy details.
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct PrivacyDetails {
+pub struct PrivacyDetails<'a> {
     /// Whether this IP address belongs to a VPN. (bool)
-    pub vpn: String,
+    pub vpn: &'a str,
 
     /// Whether this IP address belongs to a proxy. (bool)
-    pub proxy: String,
+    pub proxy: &'a str,
 
     /// Whether this IP address is using Tor. (bool)
-    pub tor: String,
+    pub tor: &'a str,
 
     /// Whether this IP address is a relay. (bool)
-    pub relay: String,
+    pub relay: &'a str,
 
     /// Whether this IP address is from a hosting provider. (bool)
-    pub hosting: String,
+    pub hosting: &'a str,
 
     /// The service offering the privacy service(s) listed here.
-    pub service: String,
+    pub service: &'a str,
 }
 
 /// Company details.
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct CompanyDetails {
+pub struct CompanyDetails<'a> {
     // COMPANY
     /// The name of the entity that owns the IP address.
-    pub name: String,
+    pub name: &'a str,
 
     /// The domain for the entity that owns this IP address.
-    pub domain: String,
+    pub domain: &'a str,
 
     /// The type of entity that owns this IP address. (i.e., business, education, hosting, isp)
     #[serde(rename = "type")]
-    pub company_type: String,
+    pub company_type: &'a str,
 
     // AS
     /// The AS number. (format "AS{u32}")
-    pub asn: String,
+    pub asn: &'a str,
 
     /// The name of the entity that owns this AS.
-    pub as_name: String,
+    pub as_name: &'a str,
 
     /// The domain for the entity that owns this AS.
-    pub as_domain: String,
+    pub as_domain: &'a str,
 
     /// The entity type that owns this AS. (i.e., business, education, hosting, isp)
-    pub as_type: String,
+    pub as_type: &'a str,
 }
 
 /// Mobile carrier details.
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct CarrierDetails {
+pub struct CarrierDetails<'a> {
     /// The name of the carrier ISP that owns that mobile IP address.
-    pub carrier: String,
+    pub carrier: &'a str,
 
     /// The country code of the carrier ISP that owns that mobile IP address.
     #[serde(rename = "cc")]
-    pub country_code: String,
+    pub country_code: &'a str,
 
     /// MCC GSM network code of this carrier.
-    pub mcc: String,
+    pub mcc: &'a str,
 
     /// MNC GSM network code of this carrier.
-    pub mnc: String,
+    pub mnc: &'a str,
 
     /// The network of the carrier ISP that owns that mobile IP address.
-    pub network: String,
+    pub network: &'a str,
 }

@@ -141,7 +141,7 @@ pub fn get_maxmind_city(addr: IpAddr) -> Result<(City<'static>, Option<IpNet>), 
 }
 
 #[cfg(not(test))]
-pub fn get_ipinfo_location(addr: IpAddr) -> Result<(LocationDetails, Option<IpNet>), String> {
+pub fn get_ipinfo_location(addr: IpAddr) -> Result<(LocationDetails<'static>, Option<IpNet>), String> {
     match IPINFO.deref() {
         Err(rr) => Err(format!("could not read city db: {}", rr)),
         Ok(ipinfo) => match ipinfo.location.lookup_prefix(addr) {
@@ -152,7 +152,7 @@ pub fn get_ipinfo_location(addr: IpAddr) -> Result<(LocationDetails, Option<IpNe
 }
 
 #[cfg(not(test))]
-pub fn get_ipinfo_privacy(addr: IpAddr) -> Result<(PrivacyDetails, Option<IpNet>), String> {
+pub fn get_ipinfo_privacy(addr: IpAddr) -> Result<(PrivacyDetails<'static>, Option<IpNet>), String> {
     match IPINFO.deref() {
         Err(rr) => Err(format!("could not read city db: {}", rr)),
         Ok(ipinfo) => match ipinfo.privacy.lookup_prefix(addr) {
@@ -163,7 +163,7 @@ pub fn get_ipinfo_privacy(addr: IpAddr) -> Result<(PrivacyDetails, Option<IpNet>
 }
 
 #[cfg(not(test))]
-pub fn get_ipinfo_company(addr: IpAddr) -> Result<(CompanyDetails, Option<IpNet>), String> {
+pub fn get_ipinfo_company(addr: IpAddr) -> Result<(CompanyDetails<'static>, Option<IpNet>), String> {
     match IPINFO.deref() {
         Err(rr) => Err(format!("could not read city db: {}", rr)),
         Ok(ipinfo) => match ipinfo.company.lookup_prefix(addr) {
@@ -174,7 +174,7 @@ pub fn get_ipinfo_company(addr: IpAddr) -> Result<(CompanyDetails, Option<IpNet>
 }
 
 #[cfg(not(test))]
-pub fn get_ipinfo_carrier(addr: IpAddr) -> Result<(CarrierDetails, Option<IpNet>), String> {
+pub fn get_ipinfo_carrier(addr: IpAddr) -> Result<(CarrierDetails<'static>, Option<IpNet>), String> {
     match IPINFO.deref() {
         Err(rr) => Err(format!("could not read city db: {}", rr)),
         Ok(ipinfo) => match ipinfo.carrier.lookup_prefix(addr) {
@@ -200,21 +200,21 @@ pub fn get_maxmind_city(_addr: IpAddr) -> Result<(City<'static>, Option<IpNet>),
 }
 
 #[cfg(test)]
-pub fn get_ipinfo_location(_addr: IpAddr) -> Result<(LocationDetails, Option<IpNet>), String> {
+pub fn get_ipinfo_location(_addr: IpAddr) -> Result<(LocationDetails<'static>, Option<IpNet>), String> {
     Err("TEST".into())
 }
 
 #[cfg(test)]
-pub fn get_ipinfo_privacy(_addr: IpAddr) -> Result<(PrivacyDetails, Option<IpNet>), String> {
+pub fn get_ipinfo_privacy(_addr: IpAddr) -> Result<(PrivacyDetails<'static>, Option<IpNet>), String> {
     Err("TEST".into())
 }
 
 #[cfg(test)]
-pub fn get_ipinfo_company(_addr: IpAddr) -> Result<(CompanyDetails, Option<IpNet>), String> {
+pub fn get_ipinfo_company(_addr: IpAddr) -> Result<(CompanyDetails<'static>, Option<IpNet>), String> {
     Err("TEST".into())
 }
 
 #[cfg(test)]
-pub fn get_ipinfo_carrier(_addr: IpAddr) -> Result<(CarrierDetails, Option<IpNet>), String> {
+pub fn get_ipinfo_carrier(_addr: IpAddr) -> Result<(CarrierDetails<'static>, Option<IpNet>), String> {
     Err("TEST".into())
 }
