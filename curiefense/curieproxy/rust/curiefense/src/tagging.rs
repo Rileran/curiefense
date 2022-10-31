@@ -139,8 +139,7 @@ fn check_entry(rinfo: &RequestInfo, tags: &Tags, sub: &GlobalFilterEntry) -> Mat
             .rinfo
             .geoip
             .company
-            .as_ref()
-            .and_then(|ccmp| check_single(cmp, ccmp.as_str(), Location::Ip)),
+            .and_then(|ccmp| check_single(cmp, ccmp, Location::Ip)),
         GlobalFilterEntryE::Authority(at) => check_single(at, &rinfo.rinfo.host, Location::Request),
         GlobalFilterEntryE::Tag(tg) => tags.get(&tg.exact).cloned(),
         GlobalFilterEntryE::SecurityPolicyId(id) => {
@@ -190,37 +189,31 @@ pub fn tag_request(
     tags.insert_qualified("ip", &rinfo.rinfo.geoip.ipstr, Location::Ip);
     tags.insert_qualified(
         "geo-continent-name",
-        rinfo.rinfo.geoip.continent_name.as_deref().unwrap_or("nil"),
+        rinfo
+            .rinfo
+            .geoip
+            .continent_name
+            .unwrap_or("nil")
+            .to_lowercase()
+            .as_str(),
         Location::Ip,
     );
     tags.insert_qualified(
         "geo-continent-code",
-        rinfo.rinfo.geoip.continent_code.as_deref().unwrap_or("nil"),
+        rinfo.rinfo.geoip.continent_code.unwrap_or("nil"),
         Location::Ip,
     );
-    tags.insert_qualified(
-        "geo-city",
-        rinfo.rinfo.geoip.city_name.as_deref().unwrap_or("nil"),
-        Location::Ip,
-    );
-    tags.insert_qualified(
-        "geo-org",
-        rinfo.rinfo.geoip.company.as_deref().unwrap_or("nil"),
-        Location::Ip,
-    );
+    tags.insert_qualified("geo-city", rinfo.rinfo.geoip.city_name.unwrap_or("nil"), Location::Ip);
+    tags.insert_qualified("geo-org", rinfo.rinfo.geoip.company.unwrap_or("nil"), Location::Ip);
     tags.insert_qualified(
         "geo-country",
-        rinfo.rinfo.geoip.country_name.as_deref().unwrap_or("nil"),
+        rinfo.rinfo.geoip.country_name.unwrap_or("nil"),
         Location::Ip,
     );
-    tags.insert_qualified(
-        "geo-region",
-        rinfo.rinfo.geoip.region.as_deref().unwrap_or("nil"),
-        Location::Ip,
-    );
+    tags.insert_qualified("geo-region", rinfo.rinfo.geoip.region.unwrap_or("nil"), Location::Ip);
     tags.insert_qualified(
         "geo-subregion",
-        rinfo.rinfo.geoip.subregion.as_deref().unwrap_or("nil"),
+        rinfo.rinfo.geoip.subregion.unwrap_or("nil"),
         Location::Ip,
     );
     match rinfo.rinfo.geoip.asn {
@@ -238,15 +231,29 @@ pub fn tag_request(
         rinfo.rinfo.geoip.network.as_deref().unwrap_or("nil"),
         Location::Ip,
     );
-    if let Some(is_anonymous_proxy) = rinfo.rinfo.geoip.is_anonymous_proxy {
-        if is_anonymous_proxy {
-            tags.insert("mm-anon", Location::Ip)
-        }
+    if rinfo.rinfo.geoip.is_anonymous_proxy.unwrap_or(false) {
+        tags.insert("mm-anon", Location::Ip)
     }
-    if let Some(is_satellite_provider) = rinfo.rinfo.geoip.is_satellite_provider {
-        if is_satellite_provider {
-            tags.insert("mm-sat", Location::Ip)
-        }
+    if rinfo.rinfo.geoip.is_satellite_provider.unwrap_or(false) {
+        tags.insert("mm-sat", Location::Ip)
+    }
+    if rinfo.rinfo.geoip.is_vpn.unwrap_or(false) {
+        tags.insert("ipinfo-vpn", Location::Ip)
+    }
+    if rinfo.rinfo.geoip.is_tor.unwrap_or(false) {
+        tags.insert("ipinfo-tor", Location::Ip)
+    }
+    if rinfo.rinfo.geoip.is_relay.unwrap_or(false) {
+        tags.insert("ipinfo-relay", Location::Ip)
+    }
+    if rinfo.rinfo.geoip.is_hosting.unwrap_or(false) {
+        tags.insert("ipinfo-hosting", Location::Ip)
+    }
+    if let Some(privacy_service) = rinfo.rinfo.geoip.privacy_service {
+        tags.insert_qualified("ipinfo-privacy-service", privacy_service, Location::Ip)
+    }
+    if rinfo.rinfo.geoip.is_mobile.unwrap_or(false) {
+        tags.insert("ipinfo-mobile", Location::Ip);
     }
 
     let mut matched = 0;

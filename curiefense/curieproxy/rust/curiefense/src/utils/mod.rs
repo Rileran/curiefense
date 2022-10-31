@@ -19,10 +19,13 @@ use crate::config::hostmap::SecurityPolicy;
 use crate::config::matchers::{RequestSelector, RequestSelectorCondition};
 use crate::config::raw::ContentType;
 use crate::config::virtualtags::VirtualTags;
+use crate::geo::{
+    get_ipinfo_carrier, get_ipinfo_company, get_ipinfo_location, get_ipinfo_privacy, get_maxmind_asn, get_maxmind_city,
+    get_maxmind_country,
+};
 use crate::interface::stats::Stats;
 use crate::interface::{AnalyzeResult, Decision, Location, Tags};
 use crate::logs::Logs;
-use crate::maxmind::{get_asn, get_city, get_country};
 use crate::requestfields::RequestField;
 use crate::utils::decoders::{parse_urlencoded_params, urldecode_str, DecodingResult};
 
@@ -204,18 +207,24 @@ pub struct GeoIp {
     pub ip: Option<IpAddr>,
     pub location: Option<(f64, f64)>, // (lat, lon)
     pub in_eu: Option<bool>,
-    pub city_name: Option<String>,
-    pub country_iso: Option<String>,
-    pub country_name: Option<String>,
-    pub continent_name: Option<String>,
-    pub continent_code: Option<String>,
+    pub city_name: Option<&'static str>,
+    pub country_iso: Option<&'static str>,
+    pub country_name: Option<&'static str>,
+    pub continent_name: Option<&'static str>,
+    pub continent_code: Option<&'static str>,
     pub asn: Option<u32>,
-    pub company: Option<String>,
-    pub region: Option<String>,
-    pub subregion: Option<String>,
+    pub company: Option<&'static str>,
+    pub region: Option<&'static str>,
+    pub subregion: Option<&'static str>,
     pub network: Option<String>,
     pub is_anonymous_proxy: Option<bool>,
     pub is_satellite_provider: Option<bool>,
+    pub is_vpn: Option<bool>,
+    pub is_tor: Option<bool>,
+    pub is_relay: Option<bool>,
+    pub is_hosting: Option<bool>,
+    pub privacy_service: Option<&'static str>,
+    pub is_mobile: Option<bool>,
 }
 
 impl GeoIp {
@@ -419,6 +428,12 @@ pub fn find_geoip(logs: &mut Logs, ipstr: String) -> GeoIp {
         network: None,
         is_anonymous_proxy: None,
         is_satellite_provider: None,
+        is_hosting: None,
+        is_relay: None,
+        is_tor: None,
+        is_vpn: None,
+        privacy_service: None,
+        is_mobile: None,
     };
 
     let ip = match pip {
@@ -429,32 +444,33 @@ pub fn find_geoip(logs: &mut Logs, ipstr: String) -> GeoIp {
         }
     };
 
-    let get_name = |mmap: &Option<std::collections::BTreeMap<&str, &str>>| {
-        mmap.as_ref().and_then(|mp| mp.get("en")).map(|s| s.to_lowercase())
+    // // fill struct using maxmind
+    let get_name = |mmap: &Option<std::collections::BTreeMap<&'static str, &'static str>>| {
+        mmap.as_ref().and_then(|mp| mp.get("en").copied())
     };
 
-    if let Ok((asninfo, _)) = get_asn(ip) {
+    if let Ok((asninfo, _)) = get_maxmind_asn(ip) {
         geoip.asn = asninfo.autonomous_system_number;
-        geoip.company = asninfo.autonomous_system_organization.map(|s| s.to_string());
+        geoip.company = asninfo.autonomous_system_organization;
     }
 
-    let extract_continent = |g: &mut GeoIp, mcnt: Option<country::Continent>| {
+    let extract_continent = |g: &mut GeoIp, mcnt: Option<country::Continent<'static>>| {
         if let Some(continent) = mcnt {
-            g.continent_code = continent.code.map(|s| s.to_string());
+            g.continent_code = continent.code;
             g.continent_name = get_name(&continent.names);
         }
     };
 
-    let extract_country = |g: &mut GeoIp, mcnt: Option<country::Country>| {
+    let extract_country = |g: &mut GeoIp, mcnt: Option<country::Country<'static>>| {
         if let Some(country) = mcnt {
             g.in_eu = country.is_in_european_union;
-            g.country_iso = country.iso_code.as_ref().map(|s| s.to_lowercase());
+            g.country_iso = country.iso_code;
             g.country_name = get_name(&country.names);
         }
     };
 
     let extract_network = |g: &mut GeoIp, network: Option<IpNet>| g.network = network.map(|n| format!("{}", n.trunc()));
-    let extract_traits = |g: &mut GeoIp, mcnt: Option<country::Traits>| {
+    let extract_mm_traits = |g: &mut GeoIp, mcnt: Option<country::Traits>| {
         if let Some(traits) = mcnt {
             g.is_anonymous_proxy = traits.is_anonymous_proxy;
             g.is_satellite_provider = traits.is_satellite_provider;
@@ -462,19 +478,19 @@ pub fn find_geoip(logs: &mut Logs, ipstr: String) -> GeoIp {
     };
 
     // first put country data in the geoip
-    if let Ok((cnty, network)) = get_country(ip) {
+    if let Ok((cnty, network)) = get_maxmind_country(ip) {
         extract_continent(&mut geoip, cnty.continent);
         extract_country(&mut geoip, cnty.country);
         extract_network(&mut geoip, network);
-        extract_traits(&mut geoip, cnty.traits);
+        extract_mm_traits(&mut geoip, cnty.traits);
     }
 
     // potentially overwrite some with the city data
-    if let Ok((cty, network)) = get_city(ip) {
+    if let Ok((cty, network)) = get_maxmind_city(ip) {
         extract_continent(&mut geoip, cty.continent);
         extract_country(&mut geoip, cty.country);
         extract_network(&mut geoip, network);
-        extract_traits(&mut geoip, cty.traits);
+        extract_mm_traits(&mut geoip, cty.traits);
         geoip.location = cty
             .location
             .as_ref()
@@ -484,13 +500,53 @@ pub fn find_geoip(logs: &mut Logs, ipstr: String) -> GeoIp {
                 [] => (),
                 [region] => geoip.region = get_name(&region.names),
                 [region, subregion] => {
-                    geoip.region = region.iso_code.map(|s| s.to_string());
-                    geoip.subregion = subregion.iso_code.map(|s| s.to_string());
+                    geoip.region = region.iso_code;
+                    geoip.subregion = subregion.iso_code;
                 }
                 _ => logs.error(|| format!("Too many subdivisions were reported for {}", ip)),
             }
         }
         geoip.city_name = cty.city.as_ref().and_then(|c| get_name(&c.names));
+    }
+
+    let extract_string = |s: &'static str| {
+        if !s.is_empty() {
+            Some(s)
+        } else {
+            None
+        }
+    };
+
+    // override using ipinfo
+    if let Ok((loc, network)) = get_ipinfo_location(ip) {
+        extract_network(&mut geoip, network);
+        geoip.city_name = Some(loc.city);
+        geoip.country_name = Some(loc.country);
+        geoip.region = Some(loc.region);
+        geoip.subregion = loc.postal_code; // TODO: this is not the exact same behaviour as maxmind
+        if let (Ok(lat), Ok(lng)) = (loc.lat.parse(), loc.lng.parse()) {
+            geoip.location = Some((lat, lng))
+        };
+    }
+
+    if let Ok((privacy, _)) = get_ipinfo_privacy(ip) {
+        geoip.is_vpn = privacy.vpn.parse().ok();
+        geoip.is_anonymous_proxy = privacy.proxy.parse().ok();
+        geoip.is_tor = privacy.tor.parse().ok();
+        geoip.is_relay = privacy.relay.parse().ok();
+        geoip.is_hosting = privacy.hosting.parse().ok();
+        geoip.privacy_service = extract_string(privacy.service)
+    }
+
+    if let Ok((company, network)) = get_ipinfo_company(ip) {
+        extract_network(&mut geoip, network);
+        geoip.company = extract_string(company.name);
+        geoip.asn = company.asn.strip_prefix("AS").and_then(|asn| asn.parse().ok());
+    }
+
+    if let Ok((carrier, _)) = get_ipinfo_carrier(ip) {
+        geoip.is_mobile = Some(true);
+        geoip.network = Some(carrier.network.to_string())
     }
 
     geoip.ip = Some(ip);
@@ -607,8 +663,8 @@ pub fn map_request(
 }
 
 pub enum Selected<'a> {
-    OStr(String),    // owned
-    Str(&'a String), // ref
+    OStr(String), // owned
+    Str(&'a str), // ref
     U32(u32),
 }
 
@@ -618,13 +674,13 @@ pub enum Selected<'a> {
 /// to avoid copies, because in the Asn case there is no way to return a reference
 pub fn selector<'a>(reqinfo: &'a RequestInfo, sel: &RequestSelector, tags: Option<&Tags>) -> Option<Selected<'a>> {
     match sel {
-        RequestSelector::Args(k) => reqinfo.rinfo.qinfo.args.get(k).map(Selected::Str),
-        RequestSelector::Header(k) => reqinfo.headers.get(k).map(Selected::Str),
-        RequestSelector::Cookie(k) => reqinfo.cookies.get(k).map(Selected::Str),
-        RequestSelector::Ip => Some(&reqinfo.rinfo.geoip.ipstr).map(Selected::Str),
-        RequestSelector::Network => reqinfo.rinfo.geoip.network.as_ref().map(Selected::Str),
-        RequestSelector::Uri => Some(&reqinfo.rinfo.qinfo.uri).map(Selected::Str),
-        RequestSelector::Path => Some(&reqinfo.rinfo.qinfo.qpath).map(Selected::Str),
+        RequestSelector::Args(k) => reqinfo.rinfo.qinfo.args.get(k).map(String::as_str).map(Selected::Str),
+        RequestSelector::Header(k) => reqinfo.headers.get(k).map(String::as_str).map(Selected::Str),
+        RequestSelector::Cookie(k) => reqinfo.cookies.get(k).map(String::as_str).map(Selected::Str),
+        RequestSelector::Ip => Some(&reqinfo.rinfo.geoip.ipstr).map(String::as_str).map(Selected::Str),
+        RequestSelector::Network => reqinfo.rinfo.geoip.network.as_deref().map(Selected::Str),
+        RequestSelector::Uri => Some(&reqinfo.rinfo.qinfo.uri).map(String::as_str).map(Selected::Str),
+        RequestSelector::Path => Some(&reqinfo.rinfo.qinfo.qpath).map(String::as_str).map(Selected::Str),
         RequestSelector::Query => {
             let q = &reqinfo.rinfo.qinfo.query;
             // an empty query string is considered missing
@@ -634,23 +690,28 @@ pub fn selector<'a>(reqinfo: &'a RequestInfo, sel: &RequestSelector, tags: Optio
                 Some(Selected::Str(q))
             }
         }
-        RequestSelector::Method => Some(&reqinfo.rinfo.meta.method).map(Selected::Str),
-        RequestSelector::Country => reqinfo.rinfo.geoip.country_iso.as_ref().map(Selected::Str),
+        RequestSelector::Method => Some(&reqinfo.rinfo.meta.method).map(String::as_str).map(Selected::Str),
+        RequestSelector::Country => reqinfo
+            .rinfo
+            .geoip
+            .country_iso
+            .map(str::to_lowercase)
+            .map(Selected::OStr),
         RequestSelector::Authority => Some(Selected::Str(&reqinfo.rinfo.host)),
-        RequestSelector::Company => reqinfo.rinfo.geoip.company.as_ref().map(Selected::Str),
+        RequestSelector::Company => reqinfo.rinfo.geoip.company.map(Selected::Str),
         RequestSelector::Asn => reqinfo.rinfo.geoip.asn.map(Selected::U32),
         RequestSelector::Tags => tags.map(|tags| Selected::OStr(tags.selector())),
         RequestSelector::SecpolId => Some(Selected::Str(&reqinfo.rinfo.secpolicy.policy.id)),
         RequestSelector::SecpolEntryId => Some(Selected::Str(&reqinfo.rinfo.secpolicy.entry.id)),
-        RequestSelector::Region => reqinfo.rinfo.geoip.region.as_ref().map(Selected::Str),
-        RequestSelector::SubRegion => reqinfo.rinfo.geoip.subregion.as_ref().map(Selected::Str),
+        RequestSelector::Region => reqinfo.rinfo.geoip.region.map(Selected::Str),
+        RequestSelector::SubRegion => reqinfo.rinfo.geoip.subregion.map(Selected::Str),
         RequestSelector::Session => Some(Selected::Str(&reqinfo.session)),
     }
 }
 
 pub fn select_string(reqinfo: &RequestInfo, sel: &RequestSelector, tags: Option<&Tags>) -> Option<String> {
     selector(reqinfo, sel, tags).map(|r| match r {
-        Selected::Str(s) => (*s).clone(),
+        Selected::Str(s) => (*s).to_string(),
         Selected::U32(n) => format!("{}", n),
         Selected::OStr(s) => s,
     })
